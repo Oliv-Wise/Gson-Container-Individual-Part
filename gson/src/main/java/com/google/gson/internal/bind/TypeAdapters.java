@@ -447,7 +447,39 @@ public final class TypeAdapters {
         }
       };
 
-  private static class FloatAdapter extends TypeAdapter<Number> {
+  private static final class FloatingPointAdapter extends TypeAdapter<Number> {
+  private final boolean strict;
+  private final FloatingPointStrategy strategy;
+
+  FloatingPointAdapter(boolean strict, FloatingPointStrategy strategy) {
+    this.strict = strict;
+    this.strategy = strategy;
+  }
+
+  @Override
+  public Number read(JsonReader in) throws IOException {
+    if (in.peek() == JsonToken.NULL) {
+      in.nextNull();
+      return null;
+    }
+    return strategy.read(in);
+  }
+
+  @Override
+  public void write(JsonWriter out, Number value) throws IOException {
+    if (value == null) {
+      out.nullValue();
+      return;
+    }
+    double numericValue = strategy.toDouble(value);
+    if (strict) {
+      checkValidFloatingPoint(numericValue);
+    }
+    out.value(strategy.toOutputNumber(value, numericValue));
+  }
+}
+  
+  /*private static class FloatAdapter extends TypeAdapter<Number> {
     private final boolean strict;
 
     FloatAdapter(boolean strict) {
@@ -478,9 +510,9 @@ public final class TypeAdapters {
       Number floatNumber = value instanceof Float ? value : floatValue;
       out.value(floatNumber);
     }
-  }
+  }*/
 
-  private static class DoubleAdapter extends TypeAdapter<Number> {
+  /*private static class DoubleAdapter extends TypeAdapter<Number> {
     private final boolean strict;
 
     DoubleAdapter(boolean strict) {
@@ -508,7 +540,7 @@ public final class TypeAdapters {
       }
       out.value(doubleValue);
     }
-  }
+  }*/
 
   private static void checkValidFloatingPoint(double value) {
     if (Double.isNaN(value) || Double.isInfinite(value)) {
@@ -519,11 +551,18 @@ public final class TypeAdapters {
     }
   }
 
-  public static final TypeAdapter<Number> FLOAT = new FloatAdapter(false);
-  public static final TypeAdapter<Number> FLOAT_STRICT = new FloatAdapter(true);
+private static final FloatingPointStrategy FLOAT_STRATEGY = new FloatStrategy();
+private static final FloatingPointStrategy DOUBLE_STRATEGY = new DoubleStrategy();
 
-  public static final TypeAdapter<Number> DOUBLE = new DoubleAdapter(false);
-  public static final TypeAdapter<Number> DOUBLE_STRICT = new DoubleAdapter(true);
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Number> FLOAT = new FloatingPointAdapter(false, FLOAT_STRATEGY);
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Number> FLOAT_STRICT = new FloatingPointAdapter(true, FLOAT_STRATEGY);
+
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Number> DOUBLE = new FloatingPointAdapter(false, DOUBLE_STRATEGY);
+@SuppressWarnings("rawtypes")
+public static final TypeAdapter<Number> DOUBLE_STRICT = new FloatingPointAdapter(true, DOUBLE_STRATEGY);
 
   public static final TypeAdapter<Character> CHARACTER =
       new TypeAdapter<Character>() {
