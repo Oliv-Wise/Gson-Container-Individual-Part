@@ -31,7 +31,54 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public final class UtcDateTypeAdapter extends TypeAdapter<Date> {
+
   private static final TimeZone UTC_TIME_ZONE = TimeZone.getTimeZone("UTC");
+  private static final int YEAR_LENGTH = 4;
+  private static final int DATE_PART_LENGTH = 2;
+  private static final int MILLIS_LENGTH = 3;
+  private static final int SINGLE_CHAR_LENGTH =1;
+  private static final int ZERO_BASED_MONTH_OFFSET = 1;
+  private static final int DECIMAL_RADIX = 10;
+
+  private static final class DateParts {
+  final int year;
+  final int month;
+  final int day;
+  final int offset;
+ 
+  DateParts(int year, int month, int day, int offset) {
+    this.year = year;
+    this.month = month;
+    this.day = day;
+    this.offset = offset;
+  }
+}
+ 
+private static final class TimeParts {
+  final int hour;
+  final int minutes;
+  final int seconds;
+  final int milliseconds;
+  final int offset;
+ 
+  TimeParts(int hour, int minutes, int seconds, int milliseconds, int offset) {
+    this.hour = hour;
+    this.minutes = minutes;
+    this.seconds = seconds;
+    this.milliseconds = milliseconds;
+    this.offset = offset;
+  }
+}
+ 
+private static final class TimeZoneParts {
+  final TimeZone timeZone;
+  final int offset;
+ 
+  TimeZoneParts(TimeZone timeZone, int offset) {
+    this.timeZone = timeZone;
+    this.offset = offset;
+  }
+}
 
   @Override
   public void write(JsonWriter out, Date date) throws IOException {
@@ -138,98 +185,117 @@ public final class UtcDateTypeAdapter extends TypeAdapter<Date> {
    * @throws ParseException if the date is not in the appropriate format
    */
   private static Date parse(String date, ParsePosition pos) throws ParseException {
-    Exception fail = null;
-    try {
-      int offset = pos.getIndex();
-
-      // extract year
-      int year = parseInt(date, offset, offset += 4);
-      if (checkOffset(date, offset, '-')) {
-        offset += 1;
-      }
-
-      // extract month
-      int month = parseInt(date, offset, offset += 2);
-      if (checkOffset(date, offset, '-')) {
-        offset += 1;
-      }
-
-      // extract day
-      int day = parseInt(date, offset, offset += 2);
-      // default time value
-      int hour = 0;
-      int minutes = 0;
-      int seconds = 0;
-      // always use 0 otherwise returned date will include millis of current time
-      int milliseconds = 0;
-      if (checkOffset(date, offset, 'T')) {
-
-        // extract hours, minutes, seconds and milliseconds
-        hour = parseInt(date, offset += 1, offset += 2);
-        if (checkOffset(date, offset, ':')) {
-          offset += 1;
-        }
-
-        minutes = parseInt(date, offset, offset += 2);
-        if (checkOffset(date, offset, ':')) {
-          offset += 1;
-        }
-        // second and milliseconds can be optional
-        if (date.length() > offset) {
-          char c = date.charAt(offset);
-          if (c != 'Z' && c != '+' && c != '-') {
-            seconds = parseInt(date, offset, offset += 2);
-            // milliseconds can be optional in the format
-            if (checkOffset(date, offset, '.')) {
-              milliseconds = parseInt(date, offset += 1, offset += 3);
-            }
-          }
-        }
-      }
-
-      // extract timezone
-      String timezoneId;
-      if (date.length() <= offset) {
-        throw new IllegalArgumentException("No time zone indicator");
-      }
-      char timezoneIndicator = date.charAt(offset);
-      if (timezoneIndicator == '+' || timezoneIndicator == '-') {
-        String timezoneOffset = date.substring(offset);
-        timezoneId = GMT_ID + timezoneOffset;
-        offset += timezoneOffset.length();
-      } else if (timezoneIndicator == 'Z') {
-        timezoneId = GMT_ID;
-        offset += 1;
-      } else {
-        throw new IndexOutOfBoundsException("Invalid time zone indicator " + timezoneIndicator);
-      }
-
-      TimeZone timezone = TimeZone.getTimeZone(timezoneId);
-      if (!timezone.getID().equals(timezoneId)) {
-        throw new IndexOutOfBoundsException();
-      }
-
-      Calendar calendar = new GregorianCalendar(timezone);
-      calendar.setLenient(false);
-      calendar.set(Calendar.YEAR, year);
-      calendar.set(Calendar.MONTH, month - 1);
-      calendar.set(Calendar.DAY_OF_MONTH, day);
-      calendar.set(Calendar.HOUR_OF_DAY, hour);
-      calendar.set(Calendar.MINUTE, minutes);
-      calendar.set(Calendar.SECOND, seconds);
-      calendar.set(Calendar.MILLISECOND, milliseconds);
-
-      pos.setIndex(offset);
-      return calendar.getTime();
-      // If we get a ParseException it'll already have the right message/offset.
-      // Other exception types can convert here.
-    } catch (IndexOutOfBoundsException | IllegalArgumentException e) {
-      fail = e;
-    }
-    String input = (date == null) ? null : ("'" + date + "'");
-    throw new ParseException(
-        "Failed to parse date [" + input + "]: " + fail.getMessage(), pos.getIndex());
+  Exception fail = null;
+  try {
+    int initialOffset = pos.getIndex();
+ 
+    DateParts dateParts = parseDateParts(date, initialOffset);
+    TimeParts timeParts = parseTimeParts(date, dateParts.offset);
+    TimeZoneParts timeZoneParts = parseTimeZone(date, timeParts.offset);
+ 
+    Calendar calendar = buildCalendar(dateParts, timeParts, timeZoneParts.timeZone);
+    pos.setIndex(timeZoneParts.offset);
+    return calendar.getTime();
+    // If we get a ParseException it'll already have the right message/offset.
+    // Other exception types can convert here.
+  } catch (IndexOutOfBoundsException | IllegalArgumentException e) {
+    fail = e;
   }
+ 
+  String input = (date == null) ? null : ("'" + date + "'");
+  throw new ParseException(
+      "Failed to parse date [" + input + "]: "+ fail.getMessage(), pos.getIndex());
+}
+
+private static DateParts parseDateParts(String date, int offset) {
+  int year = parseInt(date, offset, offset += YEAR_LENGTH);
+  if (checkOffset(date, offset, '-')) {
+    offset += SINGLE_CHAR_LENGTH;
+  }
+ 
+  int month = parseInt(date, offset, offset += DATE_PART_LENGTH);
+  if (checkOffset(date, offset, '-')) {
+    offset += SINGLE_CHAR_LENGTH;
+  }
+ 
+  int day = parseInt(date, offset, offset += DATE_PART_LENGTH);
+  return new DateParts(year, month, day, offset);
+}
+ 
+private static TimeParts parseTimeParts(String date, int offset) {
+  int hour = 0;
+  int minutes = 0;
+  int seconds = 0;
+  // always use 0 otherwise returned date will include millis of current time
+  int milliseconds = 0;
+ 
+  if (checkOffset(date, offset, 'T')) {
+    hour = parseInt(date, offset += SINGLE_CHAR_LENGTH, offset += DATE_PART_LENGTH);
+    if (checkOffset(date, offset, ':')) {
+      offset += SINGLE_CHAR_LENGTH;
+    }
+ 
+    minutes = parseInt(date, offset, offset += DATE_PART_LENGTH);
+    if (checkOffset(date, offset, ':')) {
+      offset += SINGLE_CHAR_LENGTH;
+    }
+ 
+    // second and milliseconds can be optional
+    if (date.length() > offset) {
+      char c = date.charAt(offset);
+      if (c != 'Z' && c != '+' && c != '-') {
+        seconds = parseInt(date, offset, offset += DATE_PART_LENGTH);
+ 
+        // milliseconds can be optional in the format
+        if (checkOffset(date, offset, '.')) {
+          milliseconds = parseInt(date, offset += SINGLE_CHAR_LENGTH, offset += MILLIS_LENGTH);
+        }
+      }
+    }
+  }
+ 
+  return new TimeParts(hour, minutes, seconds, milliseconds, offset);
+}
+ 
+private static TimeZoneParts parseTimeZone(String date, int offset) {
+  String timezoneId;
+  if (date.length() <= offset) {
+    throw new IllegalArgumentException("No time zone indicator");
+  }
+ 
+  char timezoneIndicator = date.charAt(offset);
+  if (timezoneIndicator == '+' || timezoneIndicator == '-') {
+    String timezoneOffset = date.substring(offset);
+    timezoneId = GMT_ID + timezoneOffset;
+    offset += timezoneOffset.length();
+  } else if (timezoneIndicator == 'Z') {
+    timezoneId = GMT_ID;
+    offset += SINGLE_CHAR_LENGTH;
+  } else {
+    throw new IndexOutOfBoundsException("Invalid time zone indicator " + timezoneIndicator);
+  }
+ 
+  TimeZone timeZone = TimeZone.getTimeZone(timezoneId);
+  if (!timeZone.getID().equals(timezoneId)) {
+    throw new IndexOutOfBoundsException();
+  }
+ 
+  return new TimeZoneParts(timeZone, offset);
+}
+ 
+private static Calendar buildCalendar(
+    DateParts dateParts, TimeParts timeParts, TimeZone timeZone) {
+  Calendar calendar = new GregorianCalendar(timeZone);
+  calendar.setLenient(false);
+  calendar.set(Calendar.YEAR, dateParts.year);
+  calendar.set(Calendar.MONTH, dateParts.month - ZERO_BASED_MONTH_OFFSET);
+  calendar.set(Calendar.DAY_OF_MONTH, dateParts.day);
+  calendar.set(Calendar.HOUR_OF_DAY, timeParts.hour);
+  calendar.set(Calendar.MINUTE, timeParts.minutes);
+  calendar.set(Calendar.SECOND, timeParts.seconds);
+  calendar.set(Calendar.MILLISECOND, timeParts.milliseconds);
+  return calendar;
+}
 
   /**
    * Check if the expected character exist at the given offset in the value.
@@ -244,7 +310,7 @@ public final class UtcDateTypeAdapter extends TypeAdapter<Date> {
   }
 
   /**
-   * Parse an integer located between 2 given offsets in a string
+   * Parse an integer located between 2 given offsets in a string using same logic as in Integer.parseInt() but less generic we're not supporting negative values
    *
    * @param value the string to parse
    * @param beginIndex the start index for the integer in the string
@@ -257,23 +323,23 @@ public final class UtcDateTypeAdapter extends TypeAdapter<Date> {
     if (beginIndex < 0 || endIndex > value.length() || beginIndex > endIndex) {
       throw new NumberFormatException(value);
     }
-    // use same logic as in Integer.parseInt() but less generic we're not supporting negative values
+    
     int i = beginIndex;
     int result = 0;
     int digit;
     if (i < endIndex) {
-      digit = Character.digit(value.charAt(i++), 10);
+      digit = Character.digit(value.charAt(i++), DECIMAL_RADIX);
       if (digit < 0) {
         throw new NumberFormatException("Invalid number: " + value);
       }
       result = -digit;
     }
     while (i < endIndex) {
-      digit = Character.digit(value.charAt(i++), 10);
+      digit = Character.digit(value.charAt(i++), DECIMAL_RADIX);
       if (digit < 0) {
         throw new NumberFormatException("Invalid number: " + value);
       }
-      result *= 10;
+      result *= DECIMAL_RADIX;
       result -= digit;
     }
     return -result;
