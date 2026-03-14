@@ -39,13 +39,15 @@ public class ModuleTest {
     assertThat(module.getName()).isEqualTo("com.google.gson.jpms_test");
   }
 
+  
   @Test
   public void testGsonModule() {
     // Verify that this test actually loads the final Gson JAR, and not only compiled classes
     // Note: This might fail when run from the IDE, but should succeed when run with Maven from
     // command line
     URL gsonLocation = Gson.class.getProtectionDomain().getCodeSource().getLocation();
-    assertThat(gsonLocation.getPath()).containsMatch("gson/target/gson-[^/]+\\.jar");
+    String gsonPath = gsonLocation.getPath();
+    assertThat(gsonPath).containsMatch(".*/gson/.*/gson-[^/]+\\.jar$");
 
     Module module = Gson.class.getModule();
     ModuleDescriptor moduleDescriptor = module.getDescriptor();
@@ -85,7 +87,9 @@ public class ModuleTest {
     // Gson has no main class
     assertThat(moduleDescriptor.mainClass()).isEmpty();
   }
+  
 
+  
   private static Stream<Requires> filterImplicitRequires(Set<Requires> requires) {
     return requires.stream()
         .filter(
