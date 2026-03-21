@@ -187,244 +187,43 @@ public final class TypeAdapters {
       newFactory(boolean.class, Boolean.class, BOOLEAN);
 
   public static final TypeAdapter<Number> BYTE =
-      new TypeAdapter<Number>() {
-        @Override
-        public Number read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-
-          int intValue;
-          try {
-            intValue = in.nextInt();
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(e);
-          }
-          // Allow up to 255 to support unsigned values
-          if (intValue > 255 || intValue < Byte.MIN_VALUE) {
-            throw new JsonSyntaxException(
-                "Lossy conversion from " + intValue + " to byte; at path " + in.getPreviousPath());
-          }
-          return (byte) intValue;
-        }
-
-        @Override
-        public void write(JsonWriter out, Number value) throws IOException {
-          if (value == null) {
-            out.nullValue();
-          } else {
-            out.value(value.byteValue());
-          }
-        }
-      };
-
+      new ByteAdapter();
   public static final TypeAdapterFactory BYTE_FACTORY = newFactory(byte.class, Byte.class, BYTE);
 
   public static final TypeAdapter<Number> SHORT =
-      new TypeAdapter<Number>() {
-        @Override
-        public Number read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-
-          int intValue;
-          try {
-            intValue = in.nextInt();
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(e);
-          }
-          // Allow up to 65535 to support unsigned values
-          if (intValue > 65535 || intValue < Short.MIN_VALUE) {
-            throw new JsonSyntaxException(
-                "Lossy conversion from " + intValue + " to short; at path " + in.getPreviousPath());
-          }
-          return (short) intValue;
-        }
-
-        @Override
-        public void write(JsonWriter out, Number value) throws IOException {
-          if (value == null) {
-            out.nullValue();
-          } else {
-            out.value(value.shortValue());
-          }
-        }
-      };
-
-  public static final TypeAdapterFactory SHORT_FACTORY =
-      newFactory(short.class, Short.class, SHORT);
+      new ShortAdapter();
+  public static final TypeAdapterFactory SHORT_FACTORY = newFactory(short.class, Short.class, SHORT);
 
   public static final TypeAdapter<Number> INTEGER =
-      new TypeAdapter<Number>() {
-        @Override
-        public Number read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          try {
-            return in.nextInt();
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(e);
-          }
-        }
+      new IntegerAdapter();
 
-        @Override
-        public void write(JsonWriter out, Number value) throws IOException {
-          if (value == null) {
-            out.nullValue();
-          } else {
-            out.value(value.intValue());
-          }
-        }
-      };
   public static final TypeAdapterFactory INTEGER_FACTORY =
       newFactory(int.class, Integer.class, INTEGER);
 
-  public static final TypeAdapter<AtomicInteger> ATOMIC_INTEGER =
-      new TypeAdapter<AtomicInteger>() {
-        @Override
-        public AtomicInteger read(JsonReader in) throws IOException {
-          try {
-            return new AtomicInteger(in.nextInt());
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(e);
-          }
-        }
-
-        @Override
-        public void write(JsonWriter out, AtomicInteger value) throws IOException {
-          out.value(value.get());
-        }
-      }.nullSafe();
-  public static final TypeAdapterFactory ATOMIC_INTEGER_FACTORY =
-      newFactory(AtomicInteger.class, TypeAdapters.ATOMIC_INTEGER);
+  public static final TypeAdapter<AtomicInteger> ATOMIC_INTEGER = AtomicTypeAdapters.ATOMIC_INTEGER;
+      
+  public static final TypeAdapterFactory ATOMIC_INTEGER_FACTORY = AtomicTypeAdapters.ATOMIC_INTEGER_FACTORY;
 
   public static TypeAdapter<AtomicLong> atomicLongAdapter(TypeAdapter<Number> longAdapter) {
     Objects.requireNonNull(longAdapter);
-    return new TypeAdapter<AtomicLong>() {
-      @Override
-      public AtomicLong read(JsonReader in) throws IOException {
-        Number value = longAdapter.read(in);
-        return new AtomicLong(value.longValue());
-      }
-
-      @Override
-      public void write(JsonWriter out, AtomicLong value) throws IOException {
-        longAdapter.write(out, value.get());
-      }
-    }.nullSafe();
+    return AtomicTypeAdapters.atomicLongAdapter(longAdapter);
   }
 
-  public static final TypeAdapter<AtomicBoolean> ATOMIC_BOOLEAN =
-      new TypeAdapter<AtomicBoolean>() {
-        @Override
-        public AtomicBoolean read(JsonReader in) throws IOException {
-          return new AtomicBoolean(in.nextBoolean());
-        }
+  public static final TypeAdapter<AtomicBoolean> ATOMIC_BOOLEAN = AtomicTypeAdapters.ATOMIC_BOOLEAN;
+      
+  public static final TypeAdapterFactory ATOMIC_BOOLEAN_FACTORY = AtomicTypeAdapters.ATOMIC_BOOLEAN_FACTORY;
 
-        @Override
-        public void write(JsonWriter out, AtomicBoolean value) throws IOException {
-          out.value(value.get());
-        }
-      }.nullSafe();
-  public static final TypeAdapterFactory ATOMIC_BOOLEAN_FACTORY =
-      newFactory(AtomicBoolean.class, TypeAdapters.ATOMIC_BOOLEAN);
-
-  public static final TypeAdapter<AtomicIntegerArray> ATOMIC_INTEGER_ARRAY =
-      new TypeAdapter<AtomicIntegerArray>() {
-        @Override
-        public AtomicIntegerArray read(JsonReader in) throws IOException {
-          List<Integer> list = new ArrayList<>();
-          in.beginArray();
-          while (in.hasNext()) {
-            try {
-              int integer = in.nextInt();
-              list.add(integer);
-            } catch (NumberFormatException e) {
-              throw new JsonSyntaxException(e);
-            }
-          }
-          in.endArray();
-          int length = list.size();
-          AtomicIntegerArray array = new AtomicIntegerArray(length);
-          for (int i = 0; i < length; ++i) {
-            array.set(i, list.get(i));
-          }
-          return array;
-        }
-
-        @Override
-        public void write(JsonWriter out, AtomicIntegerArray value) throws IOException {
-          out.beginArray();
-          for (int i = 0, length = value.length(); i < length; i++) {
-            out.value(value.get(i));
-          }
-          out.endArray();
-        }
-      }.nullSafe();
-  public static final TypeAdapterFactory ATOMIC_INTEGER_ARRAY_FACTORY =
-      newFactory(AtomicIntegerArray.class, TypeAdapters.ATOMIC_INTEGER_ARRAY);
+  public static final TypeAdapter<AtomicIntegerArray> ATOMIC_INTEGER_ARRAY = AtomicTypeAdapters.ATOMIC_INTEGER_ARRAY;
+      
+  public static final TypeAdapterFactory ATOMIC_INTEGER_ARRAY_FACTORY = AtomicTypeAdapters.ATOMIC_INTEGER_ARRAY_FACTORY;
 
   public static TypeAdapter<AtomicLongArray> atomicLongArrayAdapter(
       TypeAdapter<Number> longAdapter) {
     Objects.requireNonNull(longAdapter);
-    return new TypeAdapter<AtomicLongArray>() {
-      @Override
-      public AtomicLongArray read(JsonReader in) throws IOException {
-        List<Long> list = new ArrayList<>();
-        in.beginArray();
-        while (in.hasNext()) {
-          long value = longAdapter.read(in).longValue();
-          list.add(value);
-        }
-        in.endArray();
-        int length = list.size();
-        AtomicLongArray array = new AtomicLongArray(length);
-        for (int i = 0; i < length; ++i) {
-          array.set(i, list.get(i));
-        }
-        return array;
-      }
-
-      @Override
-      public void write(JsonWriter out, AtomicLongArray value) throws IOException {
-        out.beginArray();
-        for (int i = 0, length = value.length(); i < length; i++) {
-          longAdapter.write(out, value.get(i));
-        }
-        out.endArray();
-      }
-    }.nullSafe();
+    return AtomicTypeAdapters.atomicLongArrayAdapter(longAdapter);
   }
 
-  public static final TypeAdapter<Number> LONG =
-      new TypeAdapter<Number>() {
-        @Override
-        public Number read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          try {
-            return in.nextLong();
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(e);
-          }
-        }
-
-        @Override
-        public void write(JsonWriter out, Number value) throws IOException {
-          if (value == null) {
-            out.nullValue();
-          } else {
-            out.value(value.longValue());
-          }
-        }
-      };
+  public static final TypeAdapter<Number> LONG = new LongAdapter();
 
   public static final TypeAdapter<Number> LONG_AS_STRING =
       new TypeAdapter<Number>() {

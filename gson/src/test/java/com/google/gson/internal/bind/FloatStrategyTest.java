@@ -18,7 +18,6 @@ class FloatStrategyTest {
         JsonReader reader = new JsonReader(new StringReader("12.5"));
 
         Number result = strategy.read(reader);
-
         assertInstanceOf(Float.class, result);
         assertEquals(12.5f, result.floatValue(), 0.000001f);
     }
